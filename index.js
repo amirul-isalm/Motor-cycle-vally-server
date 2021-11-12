@@ -22,29 +22,34 @@ async function run() {
     const motorCycleCollection = database.collection("motorCycleCollection");
     const userCollection = database.collection("UserCollection");
     const orderdBiekCollection = database.collection("orderdBiekCollection");
-    const feedbackCollection=database.collection("feedbackCollection")
+    const feedbackCollection = database.collection("feedbackCollection");
 
     //    get all data from motorCycleCollection database
     app.get("/motorcycels", async (req, res) => {
       const result = await motorCycleCollection.find({}).toArray();
       res.json(result);
     });
+    // get all review
+    app.get("/feedback", async (req, res) => {
+      const result = await feedbackCollection.find({}).toArray();
+      res.json(result);
+    });
 
-    // Add new Bike collection 
-app.post("/addABike", async (req, res) => {
-  const bike = req.body.newBike;
-  const result = await motorCycleCollection.insertOne(bike);
-  
-  res.json(result);
-});
-    
+    // Add new Bike collection
+    app.post("/addABike", async (req, res) => {
+      const bike = req.body.newBike;
+      const result = await motorCycleCollection.insertOne(bike);
+
+      res.json(result);
+    });
+
     // Add a new review
-app.post("/addReview", async (req, res) => {
-  const feedback = req.body.feedback;
-  const result = await feedbackCollection.insertOne(feedback);
-  res.json(result);
-});
-    
+    app.post("/addReview", async (req, res) => {
+      const feedback = req.body.feedback;
+      const result = await feedbackCollection.insertOne(feedback);
+      res.json(result);
+    });
+
     // get specific data useing id
     app.get("/motorcycels/:id", async (req, res) => {
       const id = req.params.id;
@@ -62,7 +67,8 @@ app.post("/addReview", async (req, res) => {
     });
     // save user in database  google login
     app.put("/users", async (req, res) => {
-      const user = res.body;
+      const user = req.body;
+      console.log(user);
       const filter = { email: user.email };
       const options = { upsert: true };
       const updateDoc = {
@@ -100,12 +106,39 @@ app.post("/addReview", async (req, res) => {
       const options = { upsert: true };
       delete bike._id;
       const updateDoc = {
-        $set: bike
-      }
-const result = await orderdBiekCollection.updateOne(filter, updateDoc, options);
-res.send(result);
-
-     
+        $set: bike,
+      };
+      const result = await orderdBiekCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+    // update Price
+    app.put("/updatePrice", async (req, res) => {
+      const updateinfo = req.body;
+      console.log(updateinfo);
+      const id = updateinfo._id;
+      const filter = { _id: ObjectId(id) };
+      const options = { upsert: true };
+      delete updateinfo._id;
+      const updateDoc = {
+        $set: updateinfo,
+      };
+      const result = await motorCycleCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+    // delete an item useing id
+    app.delete("/bikeCollection/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await motorCycleCollection.deleteOne(query);
+      res.json(result);
     });
     // delete an item useing id
     app.delete("/orderdBiek/:id", async (req, res) => {
@@ -113,6 +146,27 @@ res.send(result);
       const query = { _id: ObjectId(id) };
       const result = await orderdBiekCollection.deleteOne(query);
       res.json(result);
+    });
+    // make admin
+    app.put("/users/admin", async (req, res) => {
+      const email = req.body.email;
+      const filter = { email: email };
+      const updateDoc = { $set: { role: "admin" } };
+      const result = await userCollection.updateOne(filter, updateDoc);
+      res.json(result);
+    });
+    // check admin
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      if (email) {
+        const coursor = { email: email };
+        const user = await userCollection.findOne(coursor);
+        let isAdmin = false;
+        if (user?.role === "admin") {
+          isAdmin = true;
+        }
+        res.json({ admin: isAdmin });
+      }
     });
   } finally {
     //    await client.close()
