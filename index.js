@@ -2,10 +2,18 @@ const express = require("express");
 const app = express();
 const ObjectId = require("mongodb").ObjectId;
 require("dotenv").config();
+const admin = require("firebase-admin");
 const port = process.env.PORT || 5000;
 const cors = require("cors");
 app.use(cors());
 app.use(express.json());
+
+// firebase admin environment
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_JWT_SERVER_ACCOUNT);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 // mongodb clint and uri link;
 const { MongoClient } = require("mongodb");
@@ -14,6 +22,18 @@ const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
+
+async function verifyToken(req, res, next) {
+  if (req.headers?.authorizetion?.startsWith("Bearer ")) {
+    const token = req.headers?.authorizetion?.split(" ")[1];
+
+    try {
+      const decodedUser = await admin.auth().verifyIdToken(token);
+      req.decodedEmail = decodedUser.email;
+    } catch {}
+  }
+  next();
+}
 
 async function run() {
   try {
@@ -62,13 +82,13 @@ async function run() {
     app.post("/users", async (req, res) => {
       const user = req.body;
       const result = await userCollection.insertOne(user);
-      console.log(result);
+      
       res.json(result);
     });
     // save user in database  google login
     app.put("/users", async (req, res) => {
       const user = req.body;
-      console.log(user);
+      
       const filter = { email: user.email };
       const options = { upsert: true };
       const updateDoc = {
@@ -85,9 +105,19 @@ async function run() {
     });
 
     // get all order bike
-    app.get("/allorderdBieks", async (req, res) => {
-      const result = await orderdBiekCollection.find({}).toArray();
-      res.json(result);
+    app.get("/allorderdBieks", verifyToken, async (req, res) => {
+      const requsterEmail = req.decodedEmail;
+      if (requsterEmail) {
+        const requesterAccoute = await userCollection.findOne({
+          email: requsterEmail,
+        });
+        if (requesterAccoute.role === "admin") {
+          const result = await orderdBiekCollection.find({}).toArray();
+          res.json(result);
+        }
+      } else {
+        res.status(403).json("You do not have permission  to use this api");
+      }
     });
     // get order bike using user email
     app.get("/orderdBiek", async (req, res) => {
@@ -100,7 +130,6 @@ async function run() {
     // update delevary status
     app.put("/orderbike", async (req, res) => {
       const bike = req.body;
-      console.log(bike);
       const id = bike._id;
       const filter = { _id: ObjectId(id) };
       const options = { upsert: true };
@@ -118,7 +147,6 @@ async function run() {
     // update Price
     app.put("/updatePrice", async (req, res) => {
       const updateinfo = req.body;
-      console.log(updateinfo);
       const id = updateinfo._id;
       const filter = { _id: ObjectId(id) };
       const options = { upsert: true };
@@ -147,13 +175,24 @@ async function run() {
       const result = await orderdBiekCollection.deleteOne(query);
       res.json(result);
     });
-    // make admin
-    app.put("/users/admin", async (req, res) => {
+    //------------ make admin----------------
+    app.put("/users/admin", verifyToken, async (req, res) => {
       const email = req.body.email;
-      const filter = { email: email };
-      const updateDoc = { $set: { role: "admin" } };
-      const result = await userCollection.updateOne(filter, updateDoc);
-      res.json(result);
+      const requsterEmail = req.decodedEmail;
+      if (requsterEmail) {
+        const requesterAccoute = await userCollection.findOne({
+          email: requsterEmail,
+        });
+
+        if (requesterAccoute.role === "admin") {
+          const filter = { email: email };
+          const updateDoc = { $set: { role: "admin" } };
+          const result = await userCollection.updateOne(filter, updateDoc);
+          res.json(result);
+        }
+      } else {
+        res.status(403).json("You Do Not Have Permission To make Admin");
+      }
     });
     // check admin
     app.get("/users/:email", async (req, res) => {
